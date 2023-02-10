@@ -35,23 +35,33 @@ class HTTPResponse(object):
 class HTTPClient(object):
     #def get_host_port(self,url):
 
+    # connect to the host and port
     def connect(self, host, port):
         self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.socket.connect((host, port))
         return None
 
+    # read code from the socket
     def get_code(self, data):
-        return None
+        response = data.split('\r\n')[0]
+        code = response.split(" ")[1]
+        return int(code)
 
+    # read headers from the socket
     def get_headers(self,data):
-        return None
+        headers = data.split('\r\n\r\n')
+        return headers[0]
 
+    # read body from the socket
     def get_body(self, data):
-        return None
+        body = data.split('\r\n\r\n')
+        return body[1]
     
+    # send data over the socket
     def sendall(self, data):
         self.socket.sendall(data.encode('utf-8'))
         
+    # close the socket
     def close(self):
         self.socket.close()
 
@@ -68,14 +78,96 @@ class HTTPClient(object):
         return buffer.decode('utf-8')
 
     def GET(self, url, args=None):
-        code = 500
-        body = ""
+        # Parse URL
+        url_par = urllib.parse.urlparse(url)
+
+        # Unpack the result of urlparse into separate variables
+        host, port, scheme = url_par.hostname, url_par.port, url_par.scheme
+
+        # If port not given set default port
+        if not port:
+            port = self.get_default_port(scheme)
+
+        # Connect to host
+        self.connect(host, port)
+
+        # Set path if its none
+        path = '/'
+        if url_par.path:
+            path = url_par.path
+
+        # Send request
+        request = "GET {} HTTP/1.1\r\nHost: {}\r\nConnection:close\r\n\r\n".format(
+            path,
+            host
+        )
+        self.sendall(request)
+
+        # Receive response
+        response = self.recvall(self.socket)
+
+        # Parse response
+        code, body = self.get_code(response), self.get_body(response)
+        print(code)
+        print(self.get_headers(response))
+        print(body)
+
+        # Close connection
+        self.close()
+        
         return HTTPResponse(code, body)
 
     def POST(self, url, args=None):
-        code = 500
-        body = ""
+        # Parse URL
+        url_par = urllib.parse.urlparse(url)
+
+        # Unpack the result of urlparse into separate variables
+        host, port, scheme = url_par.hostname, url_par.port, url_par.scheme
+
+        # If port not given set default port
+        if not port:
+            port = self.get_default_port(scheme)
+
+        # Parse post arguments
+        en_arguments = urllib.parse.urlencode('')
+        if args:
+            en_arguments = urllib.parse.urlencode(args)
+
+        # Connect to host
+        self.connect(host, port)
+
+        # Set path if its none
+        path = '/'
+        if url_par.path:
+            path = url_par.path
+
+        # Send request
+        request = "POST {} HTTP/1.1\r\nHost: {}\r\nContent-Type: application/x-www-form-urlencoded\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{}".format(
+            path,
+            host,
+            len(en_arguments),
+            en_arguments
+        )
+        self.sendall(request)
+
+        # Receive response
+        response = self.recvall(self.socket)
+
+        # Parse response
+        code, body = self.get_code(response), self.get_body(response)
+        print(code)
+        print(self.get_headers(response))
+        print(body)
+
+        # Close connection
+        self.close()
         return HTTPResponse(code, body)
+
+    def get_default_port(self, scheme):
+        if scheme == "http":
+            return 80
+        elif scheme == "https":
+            return 443
 
     def command(self, url, command="GET", args=None):
         if (command == "POST"):
